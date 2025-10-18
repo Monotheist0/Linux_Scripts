@@ -1,0 +1,17 @@
+# Exclude personal data
+*.log
+*.errors
+*_output_*.txt
+*_output_*.txt.gz
+system_inventory_*.txt*
+
+# Exclude sensitive info
+*password*
+*secret*
+*api_key*
+*.env
+
+# Exclude temp files
+*.tmp
+*.swp
+*~
