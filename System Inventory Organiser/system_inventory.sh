@@ -7,7 +7,7 @@
 #          packages for backup and tracking purposes
 # Author: Monotheist0
 # System: Fedora KDE Plasma 42
-# Version: 2.3 - Fixed DNF5 compatibility and formatting issues
+# Version: 1
 # ============================================================================
 
 # STRICT MODE: Exit on error, undefined variables, and pipe failures
