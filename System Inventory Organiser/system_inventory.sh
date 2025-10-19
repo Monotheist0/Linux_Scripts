@@ -5,7 +5,7 @@
 # ============================================================================
 # Purpose: Generate a comprehensive list of all installed applications and
 #          packages for backup and tracking purposes
-# Author: Monotheist
+# Author: Monotheist0
 # System: Fedora KDE Plasma 42
 # Version: 2.3 - Fixed DNF5 compatibility and formatting issues
 # ============================================================================
