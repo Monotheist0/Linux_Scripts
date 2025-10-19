@@ -2,6 +2,11 @@
 
 Personal collection of bash scripts for Linux system administration and automation.
 
+## About
+
+These are scripts I regularly use to automate and simplify my Linux workflow.
+I developed and tested them with help from AI tools but I personally review and maintain the code regularly. 
+
 ## Scripts
 
 - **system_inventory.sh** - Comprehensive system inventory tool for Fedora KDE Plasma
@@ -10,10 +15,7 @@ Personal collection of bash scripts for Linux system administration and automati
   - Usage: `./system_inventory.sh --help`
 
   
-## About
 
-These are scripts I regularly use to automate and simplify my Linux workflow.
-I developed and tested them with help from AI tools but I personally review and maintain the code regularly. 
 
 
 ## License
