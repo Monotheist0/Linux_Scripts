@@ -14,9 +14,19 @@ I developed and tested them with help from AI tools but I personally review and 
   - Hardware inventory and storage analysis
   - Usage: `./system_inventory.sh --help`
 
-  
+---
 
+## Installation
 
+Clone the repository: ``git clone https://github.com/Monotheist0/Linux_Scripts.git``
+
+`` cd Linux_Scripts/scripts ``
+
+``chmod +x *.sh ``
+
+``./system_inventory.sh``
+
+---
 
 ## License
 
