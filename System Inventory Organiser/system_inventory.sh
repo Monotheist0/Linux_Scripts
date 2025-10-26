@@ -487,35 +487,191 @@ if [[ $GAMING_ONLY == false ]]; then
 fi
 
 # ============================================================================
-# SECTION 8: STORAGE USAGE ANALYSIS
+# SECTION 8: STORAGE (ACTUALLY WORKING VERSION)
 # ============================================================================
 
 print_banner "SECTION 8: STORAGE USAGE ANALYSIS"
 print_progress "Calculating storage usage..."
 
-(
+{
+    # Disable strict error handling for this section
     set +e
+
     echo "--- DNF Package Cache ---"
-    [[ -d /var/cache/dnf ]] && du -sh /var/cache/dnf 2>/dev/null || echo "Cache directory not found"
+    if [[ -d /var/cache/dnf ]]; then
+        du -sh /var/cache/dnf 2>/dev/null || echo "Unable to calculate"
+    else
+        echo "Cache directory not found"
+    fi
     echo ""
 
     if command_exists flatpak; then
         echo "--- Flatpak Storage ---"
-        [[ -d ~/.var/app ]] && du -sh ~/.var/app 2>/dev/null || echo "No Flatpak user data"
-        [[ -d /var/lib/flatpak ]] && du -sh /var/lib/flatpak 2>/dev/null || echo "Unable to calculate system Flatpak storage"
-        echo ""
-    fi
-
-    if command_exists snap; then
-        echo "--- Snap Storage ---"
-        [[ -d /var/lib/snapd/snaps ]] && du -sh /var/lib/snapd/snaps 2>/dev/null || echo "Unable to calculate"
+        if [[ -d ~/.var/app ]]; then
+            echo "User apps: $(du -sh ~/.var/app 2>/dev/null | cut -f1)"
+        fi
+        if [[ -d /var/lib/flatpak ]]; then
+            echo "System flatpaks: $(du -sh /var/lib/flatpak 2>/dev/null | cut -f1)"
+        fi
         echo ""
     fi
 
     echo "--- Top 20 Largest Installed Packages ---"
-    # FIX: Use rpm directly instead of repoquery for size info
-    rpm -qa --qf '%{SIZE} %{NAME}\n' 2>/dev/null | sort -rn | head -20 | awk '{printf "%-40s %10.2f MB\n", $2, $1/1024/1024}' || echo "Failed to query package sizes"
-) >> "$OUTPUT_FILE"
+    rpm -qa --qf '%{SIZE} %{NAME}\n' 2>/dev/null | \
+        sort -rn | head -20 | \
+        awk '{printf "%-40s %10.2f MB\n", $2, $1/1024/1024}' || \
+        echo "Failed to query package sizes"
+    echo ""
+
+    echo "═══════════════════════════════════════════════════════════════════"
+    echo "                    STORAGE & DISK HEALTH REPORT                   "
+    echo "═══════════════════════════════════════════════════════════════════"
+    echo ""
+
+    echo "--- Disk Overview ---"
+    if command_exists lsblk; then
+        lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,MODEL,ROTA 2>/dev/null
+        echo ""
+        echo "Note: ROTA=1 (HDD), ROTA=0 (SSD)"
+    fi
+    echo ""
+
+    echo "--- Filesystem Usage ---"
+    df -h 2>/dev/null | grep -E '^/dev|^Filesystem' || df -h
+    echo ""
+
+    echo "--- Storage Details by Device ---"
+    echo ""
+
+    # Process each block device
+    for dev_path in /sys/block/sd* /sys/block/nvme*; do
+        # Skip if path doesn't exist
+        [[ ! -e "$dev_path" ]] && continue
+
+        devname=$(basename "$dev_path")
+
+        # Skip partitions (devices ending in numbers)
+        [[ "$devname" =~ [0-9]$ ]] && continue
+
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Device: /dev/$devname"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+        # Model
+        if [[ -f "$dev_path/device/model" ]]; then
+            model=$(cat "$dev_path/device/model" 2>/dev/null | tr -d '[:space:]' | head -c 60)
+            echo "  Model:           $model"
+        fi
+
+        # Size
+        if [[ -f "$dev_path/size" ]]; then
+            size_sectors=$(cat "$dev_path/size" 2>/dev/null)
+            if [[ -n "$size_sectors" && "$size_sectors" -gt 0 ]]; then
+                size_gb=$(awk "BEGIN {printf \"%.1f\", $size_sectors * 512 / 1024 / 1024 / 1024}")
+                echo "  Total Capacity:  ${size_gb} GB"
+            fi
+        fi
+
+        # Type (SSD vs HDD)
+        if [[ -f "$dev_path/queue/rotational" ]]; then
+            is_rot=$(cat "$dev_path/queue/rotational" 2>/dev/null)
+            if [[ "$is_rot" == "0" ]]; then
+                echo "  Drive Type:      SSD"
+            else
+                echo "  Drive Type:      HDD"
+            fi
+        fi
+
+        # Interface
+        case "$devname" in
+            nvme*) echo "  Interface:       NVMe" ;;
+            sd*)   echo "  Interface:       SATA" ;;
+            mmc*)  echo "  Interface:       eMMC" ;;
+        esac
+
+        # Partitions list
+        echo ""
+        echo "  Partitions:"
+        if command_exists lsblk; then
+            lsblk -no NAME,SIZE,FSTYPE,MOUNTPOINT "/dev/$devname" 2>/dev/null | tail -n +2 | sed 's/^/    /'
+        fi
+
+        # Partition usage
+        echo ""
+        echo "  Mounted Partition Usage:"
+
+        # Use lsblk to get partition list safely
+        partition_list=$(lsblk -no NAME "/dev/$devname" 2>/dev/null | tail -n +2)
+
+        while IFS= read -r part; do
+            [[ -z "$part" ]] && continue
+
+            part_dev="/dev/$part"
+
+            # Check if mounted
+            if [[ -b "$part_dev" ]]; then
+                mount_point=$(findmnt -no TARGET "$part_dev" 2>/dev/null)
+
+                if [[ -n "$mount_point" ]]; then
+                    # Get usage stats
+                    df_line=$(df -h "$mount_point" 2>/dev/null | tail -1)
+
+                    if [[ -n "$df_line" ]]; then
+                        read -r _ size used avail percent _ <<< "$df_line"
+
+                        echo "    $mount_point"
+                        echo "      Size:      $size"
+                        echo "      Used:      $used"
+                        echo "      Free:      $avail"
+                        echo "      Usage:     $percent"
+                        echo ""
+                    fi
+                fi
+            fi
+        done <<< "$partition_list"
+
+        echo ""
+    done
+
+    # SMART Health
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "               DISK HEALTH (SMART)                                "
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    if command_exists smartctl; then
+        for device_path in /dev/sd? /dev/nvme?n?; do
+            [[ ! -e "$device_path" ]] && continue
+
+            echo "--- $device_path ---"
+
+            # Health
+            health=$(sudo smartctl -H "$device_path" 2>/dev/null | grep -i "SMART overall-health" | awk '{print $NF}')
+            echo "  Health:   ${health:-Unknown}"
+
+            # Temperature
+            temp=$(sudo smartctl -A "$device_path" 2>/dev/null | grep -i "temperature" | head -1 | awk '{print $(NF-1)" °C"}')
+            [[ -n "$temp" ]] && echo "  Temp:     $temp"
+
+            # Power on hours
+            hours=$(sudo smartctl -A "$device_path" 2>/dev/null | grep -i "Power_On_Hours" | awk '{print $10}')
+            if [[ -n "$hours" && "$hours" -gt 0 ]]; then
+                days=$((hours / 24))
+                echo "  Uptime:   $hours hours ($days days)"
+            fi
+
+            echo ""
+        done
+    else
+        echo "smartctl not installed."
+        echo "Install with: sudo dnf install smartmontools"
+    fi
+
+    # Re-enable strict mode
+    set -e
+
+} >> "$OUTPUT_FILE" 2>>"$ERROR_LOG"
+
 
 # ============================================================================
 # SECTION 9: HARDWARE INVENTORY
