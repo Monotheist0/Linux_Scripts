@@ -1,36 +1,48 @@
-# Linux Scripts Collection
+# Linux Scripts Collection 🚀
 
-Personal collection of bash scripts for Linux system administration and automation.
-
-## About
-
-These are scripts I regularly use to automate and simplify my Linux workflow.
-I developed and tested them with help from AI tools but I personally review and maintain the code regularly. 
-
-## Scripts
-
-- **system_inventory.sh** - Comprehensive system inventory tool for Fedora KDE Plasma
-  - Scans all installed packages (DNF, Flatpak, Snap)
-  - Hardware inventory and storage analysis
-  - Usage: `./system_inventory.sh --help`
+Personal collection of Bash & Python scripts for Linux system administration, AI workflow automation, and productivity on Fedora Linux.
 
 ---
 
-## Installation
+## 🛠️ Included Tools & Workflows
 
-Clone the repository: ``git clone https://github.com/Monotheist0/Linux_Scripts.git``
-
-`` cd Linux_Scripts/scripts ``
-
-``chmod +x *.sh ``
-
-``./system_inventory.sh``
+### 1. ⚡ OmniRoute QuickFix (`OmniRoute-QuickFix/`)
+* **Description**: Background productivity daemon triggered by pressing **`Ctrl + C` 3 times in 1 second** on highlighted text.
+* **Function**: Automatically sends copied text to your local [OmniRoute](http://localhost:20128) LLM server using the fast model (`auto/fast`), polishes grammar/tone without AI slop, and updates your clipboard ready for instant **`Ctrl + V`** pasting.
+* **Features**: Audio chime feedback (`canberra-gtk-play`), desktop notifications (`notify-send`), systemd user service & desktop autostart.
+* **Usage**:
+  ```bash
+  python3 OmniRoute-QuickFix/omniroute-quickfix.py
+  ```
 
 ---
 
-## License
+### 2. 📊 System Inventory Organiser (`System Inventory Organiser/`)
+* **Description**: Comprehensive system auditing tool tailored for Fedora Linux (supports DNF5, DNF4, Flatpak, & Snap).
+* **Function**: Scans installed applications, desktop entries, package repositories, storage/disk health, and hardware specs into a clean timestamped report.
+* **Fixes & Status**: Fully tested and non-interactive safe (no blocking `sudo` prompts during storage/SMART health scans).
+* **Usage**:
+  ```bash
+  cd "System Inventory Organiser"
+  ./system_inventory.sh -u
+  ```
 
-Licensed under the MIT License with Attribution.
-Developed with AI-assisted coding tools and verified manually.
-Please give credit if you use or modify these scripts.
+---
 
+## 📦 Installation & Setup
+
+```bash
+git clone https://github.com/Shoytanbaba99/Linux_Scripts.git
+cd Linux_Scripts
+
+# Make scripts executable
+chmod +x "System Inventory Organiser/system_inventory.sh"
+chmod +x "OmniRoute-QuickFix/omniroute-quickfix.py"
+```
+
+---
+
+## 📜 License
+
+Licensed under the **MIT License**.
+Developed & maintained for Fedora Linux workflows. Feel free to use, modify, and share!

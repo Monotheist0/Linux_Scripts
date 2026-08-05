@@ -640,21 +640,28 @@ print_progress "Calculating storage usage..."
     echo ""
 
     if command_exists smartctl; then
+        SMART_RUN="smartctl"
+        if [[ $EUID -ne 0 ]]; then
+            if command_exists sudo && sudo -n true 2>/dev/null; then
+                SMART_RUN="sudo smartctl"
+            fi
+        fi
+
         for device_path in /dev/sd? /dev/nvme?n?; do
             [[ ! -e "$device_path" ]] && continue
 
             echo "--- $device_path ---"
 
             # Health
-            health=$(sudo smartctl -H "$device_path" 2>/dev/null | grep -i "SMART overall-health" | awk '{print $NF}')
-            echo "  Health:   ${health:-Unknown}"
+            health=$($SMART_RUN -H "$device_path" 2>/dev/null | grep -i "SMART overall-health\|PASSED\|FAILED" | awk '{print $NF}')
+            echo "  Health:   ${health:-Unknown (Requires root/sudo)}"
 
             # Temperature
-            temp=$(sudo smartctl -A "$device_path" 2>/dev/null | grep -i "temperature" | head -1 | awk '{print $(NF-1)" °C"}')
+            temp=$($SMART_RUN -A "$device_path" 2>/dev/null | grep -i "temperature" | head -1 | awk '{print $(NF-1)" °C"}')
             [[ -n "$temp" ]] && echo "  Temp:     $temp"
 
             # Power on hours
-            hours=$(sudo smartctl -A "$device_path" 2>/dev/null | grep -i "Power_On_Hours" | awk '{print $10}')
+            hours=$($SMART_RUN -A "$device_path" 2>/dev/null | grep -i "Power_On_Hours" | awk '{print $10}')
             if [[ -n "$hours" && "$hours" -gt 0 ]]; then
                 days=$((hours / 24))
                 echo "  Uptime:   $hours hours ($days days)"
