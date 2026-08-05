@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-OmniRoute Quick Grammar Fixer v2.1 (Triple Ctrl+C Trigger)
-Runs in the background on Fedora Linux.
+OmniRoute Quick Fixer v3.4
+Runs in the background on Fedora / Linux desktops.
 
-Triggers on 3x rapid Ctrl+C presses:
-1. Reads clipboard text.
-2. Loads credentials safely from local .env file.
-3. Sends to local OmniRoute LLM API with model: auto/fast.
-4. Polishes grammar while preserving voice, formatting, and technical accuracy.
-5. Replaces clipboard text & plays a subtle chime + desktop notification.
+Triggers:
+- 3x rapid Ctrl+C: Instant default grammar fix.
+- 1x Ctrl+Shift+; (or 1x Ctrl+;): Pops up Zenity preset menu immediately (Keyboard-First).
+
+Features:
+- Pure Keyboard Navigation: Arrow Up/Down + Enter instantly selects and executes!
+- Full GUI management: Add, Edit, Delete preset prompts on the fly.
+- Presets stored in `prompts.json` for easy editing.
 """
 
 import os
@@ -20,10 +22,12 @@ import subprocess
 import urllib.request
 from pynput import keyboard
 
+SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+PROMPTS_FILE = os.path.join(SCRIPT_DIR, "prompts.json")
+
 # --- Helper: Load .env file safely ---
 def load_env():
-    script_dir = os.path.dirname(os.path.realpath(__file__))
-    env_path = os.path.join(script_dir, ".env")
+    env_path = os.path.join(SCRIPT_DIR, ".env")
     if os.path.exists(env_path):
         with open(env_path, "r", encoding="utf-8") as f:
             for line in f:
@@ -38,22 +42,71 @@ load_env()
 OMNIROUTE_URL = os.environ.get("OMNIROUTE_API_BASE", "http://localhost:20128/v1/chat/completions")
 OMNIROUTE_API_KEY = os.environ.get("OMNIROUTE_API_KEY", "")
 MODEL_ID = os.environ.get("OMNIROUTE_MODEL", "auto/fast")
+MAX_TOKENS = int(os.environ.get("OMNIROUTE_MAX_TOKENS", "4096"))
 
-# Enhanced System Prompt for Professional Client Communication
-SYSTEM_PROMPT = (
-    "Fix grammar, spelling, and punctuation errors only. "
-    "Do not rephrase, restructure, or change the wording unless it is strictly required to correct an error. "
-    "Preserve the original sentence structure and vocabulary exactly. "
-    "Never add em dashes, semicolons, adjectives, adverbs, or any stylistic flourishes. "
-    "Return the corrected text with no explanations or commentary."
-)
-
-TIME_WINDOW_SEC = 1.0  # 3 presses within 1.0 second
+TIME_WINDOW_SEC = 1.0
 REQUIRED_PRESSES = 3
 
+# --- Prompt Storage (JSON-backed) ---
+DEFAULT_PROMPTS = {
+    "Grammar Fix": {
+        "prompt": (
+            "You are a helpful text editor. Correct all spelling mistakes, typos, and grammatical errors in the user's text. "
+            "Maintain the original tone, sentence structure, meaning, code snippets, and markdown formatting. "
+            "Do not remove words or condense the text unless necessary to fix a grammar error. "
+            "Output only the corrected text with no intro, explanations, or commentary."
+        ),
+        "label": "Fixing grammar"
+    },
+    "Professional Email": {
+        "prompt": (
+            "Rewrite the following text to sound clear, articulate, professional, and polite. "
+            "Preserve the core message and intent while polishing tone for a professional environment. "
+            "Output only the rewritten text with no commentary."
+        ),
+        "label": "Polishing tone"
+    },
+    "Summarize (Bullets)": {
+        "prompt": (
+            "Summarize the provided text, article, or paper into clear, informative bullet points highlighting key takeaways and conclusions. "
+            "Output only the markdown bullet points with no intro or chatter."
+        ),
+        "label": "Summarizing text"
+    },
+    "Translate to English": {
+        "prompt": (
+            "Translate the provided text into clear, fluent, natural English while preserving original meaning and tone. "
+            "Output only the English translation."
+        ),
+        "label": "Translating to English"
+    }
+}
+
+def load_prompts():
+    """Loads prompt presets from prompts.json."""
+    if os.path.exists(PROMPTS_FILE):
+        try:
+            with open(PROMPTS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict) and data:
+                    return data
+        except Exception:
+            pass
+    save_prompts(DEFAULT_PROMPTS)
+    return DEFAULT_PROMPTS.copy()
+
+def save_prompts(prompts_dict):
+    """Saves prompt presets to prompts.json."""
+    try:
+        with open(PROMPTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(prompts_dict, f, indent=2)
+    except Exception as e:
+        print(f"Error saving prompts: {e}")
+
 # --- State Tracking ---
-c_press_times = []
+ctrl_c_press_times = []
 is_ctrl_pressed = False
+is_shift_pressed = False
 is_processing = False
 lock = threading.Lock()
 
@@ -68,7 +121,6 @@ def get_clipboard_text():
         except Exception:
             pass
 
-    # Try xclip (X11 / XWayland)
     try:
         res = subprocess.run(["xclip", "-selection", "clipboard", "-o"], capture_output=True, text=True, timeout=2)
         if res.returncode == 0 and res.stdout:
@@ -76,7 +128,6 @@ def get_clipboard_text():
     except Exception:
         pass
 
-    # Try xsel fallback
     try:
         res = subprocess.run(["xsel", "-b", "-o"], capture_output=True, text=True, timeout=2)
         if res.returncode == 0 and res.stdout:
@@ -125,21 +176,18 @@ def send_notification(title, message, icon="edit-paste"):
     except Exception:
         pass
 
-def fix_grammar_with_omniroute(text):
-    """Sends text to local OmniRoute API and returns corrected text with low token consumption."""
+def call_omniroute_api(text, system_prompt):
+    """Sends text to local OmniRoute API."""
     payload = {
         "model": MODEL_ID,
         "stream": False,
-        "temperature": 0.3,      # Low temp for focused, deterministic editing
-        "max_tokens": 1000,       # Prevents token overconsumption
+        "max_tokens": MAX_TOKENS,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": text}
         ]
     }
-    headers = {
-        "Content-Type": "application/json"
-    }
+    headers = {"Content-Type": "application/json"}
     if OMNIROUTE_API_KEY:
         headers["Authorization"] = f"Bearer {OMNIROUTE_API_KEY}"
 
@@ -148,12 +196,120 @@ def fix_grammar_with_omniroute(text):
         data=json.dumps(payload).encode("utf-8"),
         headers=headers
     )
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    with urllib.request.urlopen(req, timeout=45) as resp:
         data = json.loads(resp.read().decode("utf-8"))
-        corrected = data["choices"][0]["message"]["content"].strip()
-        return corrected
+        return data["choices"][0]["message"]["content"].strip()
 
-def trigger_workflow():
+def add_new_preset():
+    """Spawns Zenity entry boxes to add a new custom preset prompt."""
+    env = os.environ.copy()
+    
+    # Step 1: Preset Name
+    cmd_name = [
+        "zenity", "--entry",
+        "--title=Add New Preset",
+        "--text=Enter a title for your new prompt preset (e.g. ELI5 / Spanish Translate):",
+        "--entry-text="
+    ]
+    res_name = subprocess.run(cmd_name, capture_output=True, text=True, env=env)
+    if res_name.returncode != 0 or not res_name.stdout.strip():
+        return
+    preset_name = res_name.stdout.strip()
+
+    # Step 2: System Prompt
+    cmd_prompt = [
+        "zenity", "--entry",
+        "--title=Add System Prompt",
+        "--text=Enter the LLM System Prompt instructions for this preset:",
+        "--entry-text="
+    ]
+    res_prompt = subprocess.run(cmd_prompt, capture_output=True, text=True, env=env)
+    if res_prompt.returncode != 0 or not res_prompt.stdout.strip():
+        return
+    system_prompt = res_prompt.stdout.strip()
+
+    # Save
+    prompts = load_prompts()
+    prompts[preset_name] = {
+        "prompt": system_prompt,
+        "label": f"Running {preset_name}"
+    }
+    save_prompts(prompts)
+    send_notification("OmniRoute QuickFix", f"Added new preset: \"{preset_name}\"", icon="emblem-ok")
+
+def delete_preset():
+    """Spawns Zenity selection to delete an existing preset prompt."""
+    env = os.environ.copy()
+    prompts = load_prompts()
+    if len(prompts) <= 1:
+        send_notification("OmniRoute QuickFix", "Cannot delete last remaining preset.", icon="dialog-warning")
+        return
+
+    cmd = [
+        "zenity", "--list",
+        "--title=Delete Preset Prompt",
+        "--text=Select a preset prompt to delete (Use ↑ ↓ arrows & press Enter):",
+        "--column=Preset Name",
+        "--hide-header"
+    ]
+    for p_name in prompts.keys():
+        cmd.append(p_name)
+
+    res = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    if res.returncode == 0 and res.stdout.strip():
+        to_delete = res.stdout.strip()
+        if to_delete in prompts:
+            del prompts[to_delete]
+            save_prompts(prompts)
+            send_notification("OmniRoute QuickFix", f"Deleted preset: \"{to_delete}\"", icon="user-trash")
+
+def show_zenity_menu():
+    """Displays a keyboard-first GTK Zenity dialog. Arrow keys + Enter instantly executes."""
+    env = os.environ.copy()
+    prompts = load_prompts()
+
+    ADD_OPTION = "➕ Add New Preset Prompt..."
+    DEL_OPTION = "🗑️ Delete a Preset Prompt..."
+
+    cmd = [
+        "zenity", "--list",
+        "--title=OmniRoute QuickFix Menu",
+        "--text=Select action (Use ↑ ↓ arrows & press Enter):",
+        "--column=Preset", "--column=Description",
+        "--hide-header"
+    ]
+
+    for name, info in prompts.items():
+        cmd.extend([
+            name,
+            info.get("label", name)
+        ])
+
+    cmd.extend([
+        ADD_OPTION, "Create a custom prompt preset",
+        DEL_OPTION, "Remove an existing prompt preset"
+    ])
+    cmd.extend(["--width=540", "--height=340"])
+
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=40, env=env)
+        if res.returncode == 0 and res.stdout:
+            selection = res.stdout.strip()
+            if "|" in selection:
+                selection = selection.split("|")[0]
+            
+            if selection == ADD_OPTION:
+                add_new_preset()
+                return None
+            elif selection == DEL_OPTION:
+                delete_preset()
+                return None
+            return selection
+    except Exception:
+        pass
+    return None
+
+def trigger_workflow(action_key="Grammar Fix"):
     global is_processing
     with lock:
         if is_processing:
@@ -163,20 +319,31 @@ def trigger_workflow():
     def worker():
         global is_processing
         try:
-            time.sleep(0.15)  # Wait for clipboard write to finalize
+            time.sleep(0.15)
             text = get_clipboard_text()
             if not text or not text.strip():
-                send_notification("OmniRoute QuickFix", "No text in clipboard to fix.", icon="dialog-warning")
+                send_notification("OmniRoute QuickFix", "No text in clipboard to process.", icon="dialog-warning")
                 return
 
-            send_notification("OmniRoute QuickFix", f"Fixing grammar ({MODEL_ID})...", icon="sync-synchronizing")
+            chosen_preset = action_key
+            if action_key == "MENU":
+                chosen_preset = show_zenity_menu()
+                if not chosen_preset:
+                    return
 
-            fixed_text = fix_grammar_with_omniroute(text)
-            set_clipboard_text(fixed_text)
+            prompts = load_prompts()
+            preset_info = prompts.get(chosen_preset, prompts.get("Grammar Fix", list(prompts.values())[0]))
+            system_prompt = preset_info["prompt"]
+            label = preset_info.get("label", chosen_preset)
+
+            send_notification("OmniRoute QuickFix", f"✨ {label} ({MODEL_ID})...", icon="sync-synchronizing")
+
+            processed_text = call_omniroute_api(text, system_prompt)
+            set_clipboard_text(processed_text)
             play_audio_chime()
 
-            preview = (fixed_text[:55] + '...') if len(fixed_text) > 55 else fixed_text
-            send_notification("OmniRoute QuickFix", f"✨ Fixed! Ready to paste:\n\"{preview}\"", icon="edit-paste")
+            preview = (processed_text[:60].replace('\n', ' ') + '...') if len(processed_text) > 60 else processed_text.replace('\n', ' ')
+            send_notification("OmniRoute QuickFix", f"✨ Done! Ready to paste:\n\"{preview}\"", icon="edit-paste")
         except Exception as e:
             send_notification("OmniRoute Error", str(e), icon="dialog-error")
         finally:
@@ -186,34 +353,54 @@ def trigger_workflow():
     threading.Thread(target=worker, daemon=True).start()
 
 def on_press(key):
-    global is_ctrl_pressed, c_press_times
+    global is_ctrl_pressed, is_shift_pressed, ctrl_c_press_times
 
     if key in (keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
         is_ctrl_pressed = True
+    if key in (keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r):
+        is_shift_pressed = True
+
+    is_semi_key = False
+    if hasattr(key, 'char') and key.char and key.char in (';', ':'):
+        is_semi_key = True
+    elif hasattr(key, 'vk') and key.vk in (59, 186, 47):
+        is_semi_key = True
+    elif str(key).lower() in ("';'", "':'"):
+        is_semi_key = True
 
     is_c_key = False
-    if hasattr(key, 'char') and key.char:
-        if key.char.lower() == 'c' or key.char == '\x03':
-            is_c_key = True
+    if hasattr(key, 'char') and key.char and (key.char.lower() == 'c' or key.char == '\x03'):
+        is_c_key = True
+    elif hasattr(key, 'vk') and key.vk in (67, 99):
+        is_c_key = True
+    elif str(key).lower() in ("'c'", "'\\x03'", "'c'", "<67>", "<99>"):
+        is_c_key = True
 
-    if is_ctrl_pressed and is_c_key:
-        now = time.time()
-        c_press_times = [t for t in c_press_times if now - t <= TIME_WINDOW_SEC]
-        c_press_times.append(now)
+    if is_ctrl_pressed:
+        if is_semi_key:
+            trigger_workflow(action_key="MENU")
 
-        if len(c_press_times) >= REQUIRED_PRESSES:
-            c_press_times.clear()
-            trigger_workflow()
+        elif is_c_key and not is_shift_pressed:
+            now = time.time()
+            ctrl_c_press_times = [t for t in ctrl_c_press_times if now - t <= TIME_WINDOW_SEC]
+            ctrl_c_press_times.append(now)
+
+            if len(ctrl_c_press_times) >= REQUIRED_PRESSES:
+                ctrl_c_press_times.clear()
+                trigger_workflow(action_key="Grammar Fix")
 
 def on_release(key):
-    global is_ctrl_pressed
+    global is_ctrl_pressed, is_shift_pressed
     if key in (keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
         is_ctrl_pressed = False
+    if key in (keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r):
+        is_shift_pressed = False
 
 def main():
-    print("OmniRoute QuickFix Listener Running...")
+    print("OmniRoute QuickFix v3.4 Listener Running...")
     print(f"Endpoint: {OMNIROUTE_URL} | Model: {MODEL_ID}")
-    print("Triple Ctrl+C anywhere to fix grammar!")
+    print("- 3x Ctrl+C: Instant Grammar Fix")
+    print("- 1x Ctrl+Shift+; (or 1x Ctrl+;): Immediate Keyboard-First Zenity Menu")
 
     with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
         listener.join()

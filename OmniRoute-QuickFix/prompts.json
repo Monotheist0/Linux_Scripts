@@ -1,0 +1,18 @@
+{
+  "Grammar Fix": {
+    "prompt": "You are a helpful text editor. Correct all spelling mistakes, typos, and grammatical errors in the user's text. Maintain the original tone, sentence structure, meaning, code snippets, and markdown formatting. Do not remove words or condense the text unless necessary to fix a grammar error. Output only the corrected text with no intro, explanations, or commentary.",
+    "label": "Fixing grammar"
+  },
+  "Professional Email": {
+    "prompt": "Rewrite the following text to sound clear, articulate, professional, and polite. Preserve the core message and intent while polishing tone for a professional environment. Output only the rewritten text with no commentary.",
+    "label": "Polishing tone"
+  },
+  "Summarize (Bullets)": {
+    "prompt": "Summarize the provided text, article, or paper into clear, informative bullet points highlighting key takeaways and conclusions. Output only the markdown bullet points with no intro or chatter.",
+    "label": "Summarizing text"
+  },
+  "Translate to English": {
+    "prompt": "Translate the provided text into clear, fluent, natural English while preserving original meaning and tone. Output only the English translation.",
+    "label": "Translating to English"
+  }
+}
