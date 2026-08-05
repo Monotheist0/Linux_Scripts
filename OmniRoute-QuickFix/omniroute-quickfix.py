@@ -41,13 +41,11 @@ MODEL_ID = os.environ.get("OMNIROUTE_MODEL", "auto/fast")
 
 # Enhanced System Prompt for Professional Client Communication
 SYSTEM_PROMPT = (
-    "You are an expert professional editor. Fix grammar, spelling, punctuation, and phrasing errors in the provided text.\n"
-    "Rules:\n"
-    "- Keep the tone natural, human, clear, and professional.\n"
-    "- Eliminate AI slop, fluff, corporate buzzwords, and unnatural stiff language.\n"
-    "- PRESERVE all original line breaks, markdown, bullet points, code snippets, and key formatting.\n"
-    "- Preserve the author's underlying voice and intent.\n"
-    "- Return ONLY the polished text without any meta-commentary, intros, or surrounding quotes."
+    "Fix grammar, spelling, and punctuation errors only. "
+    "Do not rephrase, restructure, or change the wording unless it is strictly required to correct an error. "
+    "Preserve the original sentence structure and vocabulary exactly. "
+    "Never add em dashes, semicolons, adjectives, adverbs, or any stylistic flourishes. "
+    "Return the corrected text with no explanations or commentary."
 )
 
 TIME_WINDOW_SEC = 1.0  # 3 presses within 1.0 second

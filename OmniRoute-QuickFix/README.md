@@ -2,6 +2,8 @@
 
 A background productivity daemon for **Fedora Linux** (and Linux desktops) that monitors rapid `Ctrl+C` keypresses to automatically polish highlighted text using your local [OmniRoute](http://localhost:20128) LLM server.
 
+*Credit: The rapid triple `Ctrl+C` trigger workflow was directly inspired by [PasteAI](https://pasteai.app/).*
+
 ---
 
 ## ✨ Features
